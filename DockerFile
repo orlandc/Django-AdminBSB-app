@@ -1,0 +1,107 @@
+# Descarga la imagen Base de Ubuntu 18
+FROM ubuntu:18.10
+MAINTAINER orlando.montenegro@correounivalle.edu.co 
+
+ENV DEBIAN_FRONTEND=noninteractive \
+	DEBCONF_NONINTERACTIVE_SEEN=true
+
+ENV APACHE_RUN_USER=www-data \
+	APACHE_RUN_GROUP=www-data \
+    APACHE_LOG_DIR=/var/log/apache2 \
+    APACHE_LOCK_DIR=/var/lock/apache2 \
+    APACHE_RUN_DIR=/var/run/apache2 \
+    APACHE_PID_FILE=/var/run/apache2.pid
+
+#ENV HTTP_PROXY "http://user:password@host:port/"
+#ENV HTTPS_PROXY "http://user:password@host:port/"
+
+#RUN echo "Acquire::http::Proxy \"http://user:password@host:port/\"; " >> /etc/apt/apt.conf
+#RUN echo "Acquire::https::Proxy \"http://user:password@host:port/\"; " >> /etc/apt/apt.conf
+
+RUN touch /etc/apt/apt.conf.d/99fixbadproxy \
+	&& echo "Acquire::http::Pipeline-Depth 0;" >> /etc/apt/apt.conf.d/99fixbadproxy \
+	&& echo "Acquire::http::No-Cache true;" >> /etc/apt/apt.conf.d/99fixbadproxy \
+	&& echo "Acquire::BrokenProxy true;" >> /etc/apt/apt.conf.d/99fixbadproxy \
+	&& apt-get update -o Acquire::CompressionTypes::Order::=gz \
+	&& apt-get clean \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& apt-get update -y
+
+RUN apt-get update && apt-get install -y apt-transport-https
+
+RUN apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+
+RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ precise-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+
+RUN apt-get update -q && \
+    apt-get install -y wget git && \
+    python-software-properties software-properties-common postgresql-9.3 postgresql-client-9.3 postgresql-contrib-9.3 && \
+    rm -rf /var/lib/apt/lists/*
+
+USER postgres
+
+RUN /etc/init.d/postgresql start &&\
+    psql --command "CREATE USER postgreapp WITH SUPERUSER PASSWORD 'postgresapp';" &&\
+    createdb -O postgreapp postgreapp
+
+RUN echo "host all  all    0.0.0.0/0  md5" >> /etc/postgresql/9.3/main/pg_hba.conf
+
+RUN echo "listen_addresses='*'" >> /etc/postgresql/9.3/main/postgresql.conf
+
+RUN apt-get update -q && apt-get install -y locales --no-install-recommends apt-utils && rm -rf /var/lib/apt/lists/* \
+    && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+ENV LANG en_US.UTF-8
+
+RUN apt-get clean -y && apt-get -f install && dpkg --configure -a
+
+RUN apt-get update -q && \
+    apt-get install -y \
+	openssh-server \
+	swig \
+	nano \
+	python3-dev \
+	python3-setuptools \
+	python3-pip \
+	apt-utils vim curl apache2 apache2-utils \
+	libapache2-mod-wsgi-py3 \
+	sqlite3 && \
+	pip3 install -U pip setuptools && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN rm -rf /usr/bin/python && ln /usr/bin/python3 /usr/bin/python && \
+    rm -rf /usr/bin/pip && ln /usr/bin/pip3 /usr/bin/pip
+	
+RUN pip install --upgrade pip 
+
+# instalacion de django y otras tools
+RUN pip3 install django decorator appnope Markdown coreapi ptvsd psycopg2
+
+WORKDIR /tmp
+RUN git clone https://github.com/orlandc/Django-AdminBSB-app.git django
+
+RUN rm -rf /etc/apache2/sites-available/000-default.conf && \
+    rm -rf /tmp/django/Dockerfile && \
+    rm -rf /tmp/django/Readme && \
+    rm -rf /tmp/django/LICENSE && \
+	mv /tmp/django/000-default.conf /etc/apache2/sites-available/ && \
+	mkdir /var/www/html/django && mkdir /var/www/html/django/scripts && \
+	mv /tmp/django/boot.sh /var/www/html/django/scripts/ && \
+	chmod +x /var/www/html/django/scripts/* && \
+    rm -rf /tmp/django
+
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+	echo "ServerName " $(hostname --ip-address) >> /etc/apache2/apache2.conf && \
+	sed -i "s/#ServerName www.example.com/ServerName $(hostname --ip-address)/g" /etc/apache2/sites-available/000-default.conf && \
+	apache2ctl graceful && apache2ctl configtest && \
+	service apache2 reload && \
+	service apache2 restart && \
+	systemctl enable apache2
+
+EXPOSE 80 22 5432
+
+#VOLUME  ["/etc/postgresql", "/var/log/postgresql", "/var/lib/postgresql"]
+
+CMD ["apache2ctl", "-D", "FOREGROUND"]
+CMD ["/usr/lib/postgresql/9.3/bin/postgres", "-D", "/var/lib/postgresql/9.3/main", "-c", "config_file=/etc/postgresql/9.3/main/postgresql.conf"]
+CMD ["/scripts/boot.sh"]
