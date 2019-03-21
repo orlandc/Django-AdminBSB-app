@@ -11,3 +11,5 @@ fi
 service ssh restart
 
 /usr/sbin/apache2ctl -D FOREGROUND
+
+update-rc.d postgresql enable

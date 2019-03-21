@@ -45,8 +45,7 @@ USER postgres
 
 RUN /etc/init.d/postgresql start && \
     psql --command "CREATE USER postgresapp WITH SUPERUSER PASSWORD 'postgresapp';" &&\
-    createdb -O postgreapp postgreapp && \
-	update-rc.d postgresql enable 
+    createdb -O postgreapp postgreapp 
 
 RUN echo "host all  all    0.0.0.0/0  md5" >> /etc/postgresql/9.6/main/pg_hba.conf &&\
 		echo "listen_addresses='*'" >> /etc/postgresql/9.6/main/postgresql.conf
