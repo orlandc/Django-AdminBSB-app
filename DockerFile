@@ -90,7 +90,7 @@ RUN rm -rf /etc/apache2/sites-available/000-default.conf && \
 	mv /tmp/django/000-default.conf /etc/apache2/sites-available/ && \
 	mkdir /var/www/html/django && mkdir /var/www/html/django/scripts && \
 	mv /tmp/django/boot.sh /var/www/html/django/scripts/ && \
-	chmod +x /var/www/html/dj && \
+	chmod +x /var/www/html/django && \
 	ln -s /bin/bash /usr/bin/bash
 
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
