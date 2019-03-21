@@ -7,6 +7,7 @@ if [ -f "$APACHE_PID_FILE" ]; then
 	rm "$APACHE_PID_FILE"
 fi
 
+/etc/init.d/postgresql start
 service ssh restart
 
 /usr/sbin/apache2ctl -D FOREGROUND

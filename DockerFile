@@ -1,5 +1,5 @@
 # Descarga la imagen Base de Ubuntu 18
-FROM ubuntu:18.10
+FROM ubuntu
 MAINTAINER orlando.montenegro@correounivalle.edu.co 
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -18,35 +18,40 @@ ENV APACHE_RUN_USER=www-data \
 #RUN echo "Acquire::http::Proxy \"http://user:password@host:port/\"; " >> /etc/apt/apt.conf
 #RUN echo "Acquire::https::Proxy \"http://user:password@host:port/\"; " >> /etc/apt/apt.conf
 
+RUN apt-get update && apt-get install -y gnupg gnupg2
+
+RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+
+RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ precise-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+
+# Update the Ubuntu and PostgreSQL repository indexes
+RUN apt-get update && apt-get install -y apt-utils apt-transport-https ca-certificates
+
+RUN apt-get -y -q install software-properties-common &&\
+	apt-get -y -q install postgresql-9.6 postgresql-client-9.6 postgresql-contrib-9.6
+
 RUN touch /etc/apt/apt.conf.d/99fixbadproxy \
 	&& echo "Acquire::http::Pipeline-Depth 0;" >> /etc/apt/apt.conf.d/99fixbadproxy \
 	&& echo "Acquire::http::No-Cache true;" >> /etc/apt/apt.conf.d/99fixbadproxy \
 	&& echo "Acquire::BrokenProxy true;" >> /etc/apt/apt.conf.d/99fixbadproxy \
 	&& apt-get update -o Acquire::CompressionTypes::Order::=gz \
 	&& apt-get clean \
-	&& rm -rf /var/lib/apt/lists/* \
-	&& apt-get update -y
-
-RUN apt-get update && apt-get install -y apt-transport-https
-
-RUN apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
-
-RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ precise-pgdg main" > /etc/apt/sources.list.d/pgdg.list
-
-RUN apt-get update -q && \
-    apt-get install -y wget git && \
-    python-software-properties software-properties-common postgresql-9.3 postgresql-client-9.3 postgresql-contrib-9.3 && \
-    rm -rf /var/lib/apt/lists/*
+	&& apt-get update -y \ 
+	&& apt-get -y -q install wget git \
+	&& echo "root:w1234w" | chpasswd \
+    && rm -rf /var/lib/apt/lists/*
 
 USER postgres
 
-RUN /etc/init.d/postgresql start &&\
-    psql --command "CREATE USER postgreapp WITH SUPERUSER PASSWORD 'postgresapp';" &&\
-    createdb -O postgreapp postgreapp
+RUN /etc/init.d/postgresql start && \
+    psql --command "CREATE USER postgresapp WITH SUPERUSER PASSWORD 'postgresapp';" &&\
+    createdb -O postgreapp postgreapp && \
+	update-rc.d postgresql enable 
 
-RUN echo "host all  all    0.0.0.0/0  md5" >> /etc/postgresql/9.3/main/pg_hba.conf
+RUN echo "host all  all    0.0.0.0/0  md5" >> /etc/postgresql/9.6/main/pg_hba.conf &&\
+		echo "listen_addresses='*'" >> /etc/postgresql/9.6/main/postgresql.conf
 
-RUN echo "listen_addresses='*'" >> /etc/postgresql/9.3/main/postgresql.conf
+USER root
 
 RUN apt-get update -q && apt-get install -y locales --no-install-recommends apt-utils && rm -rf /var/lib/apt/lists/* \
     && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
@@ -86,8 +91,8 @@ RUN rm -rf /etc/apache2/sites-available/000-default.conf && \
 	mv /tmp/django/000-default.conf /etc/apache2/sites-available/ && \
 	mkdir /var/www/html/django && mkdir /var/www/html/django/scripts && \
 	mv /tmp/django/boot.sh /var/www/html/django/scripts/ && \
-	chmod +x /var/www/html/django/scripts/* && \
-    rm -rf /tmp/django
+	chmod +x /var/www/html/dj && \
+	ln -s /bin/bash /usr/bin/bash
 
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
@@ -103,5 +108,5 @@ EXPOSE 80 22 5432
 #VOLUME  ["/etc/postgresql", "/var/log/postgresql", "/var/lib/postgresql"]
 
 CMD ["apache2ctl", "-D", "FOREGROUND"]
-CMD ["/usr/lib/postgresql/9.3/bin/postgres", "-D", "/var/lib/postgresql/9.3/main", "-c", "config_file=/etc/postgresql/9.3/main/postgresql.conf"]
-CMD ["/scripts/boot.sh"]
+CMD ["/usr/lib/postgresql/9.6/bin/postgres", "-D", "/var/lib/postgresql/9.6/main", "-c", "config_file=/etc/postgresql/9.6/main/postgresql.conf"]
+CMD ["/var/www/html/django/scripts/boot.sh"]
